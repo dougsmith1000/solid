@@ -73,11 +73,11 @@ export function createComponent<T>(Comp: (props: T) => JSX.Element, props: T): J
   if (sharedConfig.context && !sharedConfig.context.noHydrate) {
     const c = sharedConfig.context;
     setHydrateContext(nextHydrateContext());
-    const r = Comp(props || {} as T);
+    const r = Comp(props || ({} as T));
     setHydrateContext(c);
     return r;
   }
-  return Comp(props || {} as T);
+  return Comp(props || ({} as T));
 }
 
 export function mergeProps<T, U>(source: T, source1: U): T & U;
@@ -91,8 +91,9 @@ export function mergeProps<T, U, V, W>(
 export function mergeProps(...sources: any): any {
   const target = {};
   for (let i = 0; i < sources.length; i++) {
-    const descriptors = Object.getOwnPropertyDescriptors(sources[i]);
-    Object.defineProperties(target, descriptors);
+    let source = sources[i];
+    if (typeof source === "function") source = source();
+    if (source) Object.defineProperties(target, Object.getOwnPropertyDescriptors(source));
   }
   return target;
 }
@@ -234,7 +235,8 @@ export function ErrorBoundary(props: {
   fallback: string | ((err: any, reset: () => void) => string);
   children: string;
 }) {
-  let error = NoErrors, res: any;
+  let error = NoErrors,
+    res: any;
   const ctx = sharedConfig.context!;
   const id = ctx.id + ctx.count;
   onError(err => (error = err));
@@ -337,7 +339,7 @@ export function createResource<T, S>(
   const read = () => {
     if (error) throw error;
     if (resourceContext && p) resourceContext.push(p!);
-    const resolved = sharedConfig.context!.async && sharedConfig.context!.resources[id].data;
+    const resolved = sharedConfig.context!.async && "data" in sharedConfig.context!.resources[id];
     if (!resolved && read.loading) {
       const ctx = useContext(SuspenseContext);
       if (ctx) {
@@ -358,7 +360,7 @@ export function createResource<T, S>(
     const ctx = sharedConfig.context!;
     if (!ctx.async)
       return (read.loading = !!(typeof source === "function" ? (source as () => S)() : source));
-    if (ctx.resources && id in ctx.resources && ctx.resources[id].data) {
+    if (ctx.resources && id in ctx.resources && "data" in ctx.resources[id]) {
       value = ctx.resources[id].data;
       return;
     }
@@ -467,7 +469,12 @@ export function useTransition(): [() => boolean, (fn: () => any) => void] {
 type HydrationContext = {
   id: string;
   count: number;
-  writeResource?: (id: string, v: Promise<any> | any, error?: boolean, deferStream?: boolean) => void;
+  writeResource?: (
+    id: string,
+    v: Promise<any> | any,
+    error?: boolean,
+    deferStream?: boolean
+  ) => void;
   resources: Record<string, any>;
   suspense: Record<string, SuspenseContextType>;
   registerFragment: (v: string) => (v?: string, err?: any) => boolean;
